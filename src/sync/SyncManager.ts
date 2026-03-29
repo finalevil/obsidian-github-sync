@@ -167,26 +167,22 @@ export class SyncManager {
 			return;
 		}
 
-		// Create blobs in batches of 3 with delay
+		// Create blobs sequentially with delay to avoid rate limit
 		const blobResults: Array<{ path: string; sha: string }> = [];
-		for (let i = 0; i < files.length; i += 3) {
-			if (i > 0) await this.sleep(500);
-			const batch = files.slice(i, i + 3);
-			const results = await Promise.all(
-				batch.map(async (file) => {
-					const b64 = arrayBufferToBase64(file.content);
-					const sha = await this.api.createBlob(
-						b64,
-						"base64",
-					);
-					return { path: file.path, sha };
-				}),
-			);
-			blobResults.push(...results);
-			this.logger.debug(
-				`Blobs: ${blobResults.length}/${files.length}`,
-			);
+		for (let i = 0; i < files.length; i++) {
+			if (i > 0 && i % 10 === 0) {
+				this.logger.info(
+					`Blobs: ${i}/${files.length}`,
+				);
+				await this.sleep(2000);
+			} else if (i > 0) {
+				await this.sleep(200);
+			}
+			const b64 = arrayBufferToBase64(files[i].content);
+			const sha = await this.api.createBlob(b64, "base64");
+			blobResults.push({ path: files[i].path, sha });
 		}
+		this.logger.info(`All ${blobResults.length} blobs created`);
 
 		// Create tree (no base_tree for first commit)
 		const treeItems = blobResults.map((b) => ({

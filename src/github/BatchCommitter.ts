@@ -23,25 +23,27 @@ export class BatchCommitter {
 	): Promise<string> {
 		const head = await this.api.getLatestCommit();
 
-		// Step 1: Create blobs in parallel (batch of 3, with delay)
+		// Step 1: Create blobs sequentially with delay to avoid rate limit
 		this.logger.info(`Creating ${files.length} blobs...`);
 		const blobResults: Array<{ path: string; sha: string }> = [];
 
-		for (let i = 0; i < files.length; i += 3) {
-			if (i > 0) await this.sleep(500);
-			const batch = files.slice(i, i + 3);
-			const results = await Promise.all(
-				batch.map(async (file) => {
-					const base64Content = arrayBufferToBase64(file.content);
-					const sha = await this.api.createBlob(
-						base64Content,
-						"base64",
-					);
-					return { path: file.path, sha };
-				}),
+		for (let i = 0; i < files.length; i++) {
+			if (i > 0 && i % 10 === 0) {
+				this.logger.info(
+					`Blobs: ${i}/${files.length}`,
+				);
+				await this.sleep(2000);
+			} else if (i > 0) {
+				await this.sleep(200);
+			}
+			const base64Content = arrayBufferToBase64(files[i].content);
+			const sha = await this.api.createBlob(
+				base64Content,
+				"base64",
 			);
-			blobResults.push(...results);
+			blobResults.push({ path: files[i].path, sha });
 		}
+		this.logger.info(`All ${blobResults.length} blobs created`);
 
 		// Step 2: Build tree items
 		const treeItems: Array<{
