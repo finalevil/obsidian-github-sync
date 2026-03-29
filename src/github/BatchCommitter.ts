@@ -70,7 +70,7 @@ export class BatchCommitter {
 
 		// Step 3: Create tree with base_tree for incremental update
 		this.logger.info("Creating tree...");
-		const treeSha = await this.api.createTree(head.treeSha, treeItems);
+		const treeSha = await this.api.createTree(treeItems, head.treeSha);
 
 		// Step 4: Create commit
 		this.logger.info("Creating commit...");

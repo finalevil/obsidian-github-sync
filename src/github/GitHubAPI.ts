@@ -8,6 +8,7 @@ export type GitHubErrorType =
 	| "rate_limit"
 	| "not_found"
 	| "conflict"
+	| "empty_repo"
 	| "server"
 	| "unknown";
 
@@ -108,6 +109,8 @@ export class GitHubAPI {
 			throw new GitHubError(message, status, "forbidden");
 		} else if (status === 404) {
 			throw new GitHubError(message, status, "not_found");
+		} else if (status === 409) {
+			throw new GitHubError(message, status, "empty_repo");
 		} else if (status === 422) {
 			throw new GitHubError(message, status, "conflict");
 		} else if (status >= 500) {
@@ -184,20 +187,21 @@ export class GitHubAPI {
 	}
 
 	async createTree(
-		baseTree: string,
 		treeItems: Array<{
 			path: string;
 			mode: string;
 			type: string;
 			sha: string | null;
 		}>,
+		baseTree?: string,
 	): Promise<string> {
+		const body: Record<string, unknown> = { tree: treeItems };
+		if (baseTree) {
+			body.base_tree = baseTree;
+		}
 		const resp = await this.request("/git/trees", {
 			method: "POST",
-			body: JSON.stringify({
-				base_tree: baseTree,
-				tree: treeItems,
-			}),
+			body: JSON.stringify(body),
 		});
 		return resp.json.sha;
 	}
@@ -222,6 +226,16 @@ export class GitHubAPI {
 				body: JSON.stringify({ sha, force }),
 			},
 		);
+	}
+
+	async createRef(sha: string): Promise<void> {
+		await this.request("/git/refs", {
+			method: "POST",
+			body: JSON.stringify({
+				ref: `refs/heads/${this.branch}`,
+				sha,
+			}),
+		});
 	}
 
 	async downloadZipball(): Promise<ArrayBuffer> {

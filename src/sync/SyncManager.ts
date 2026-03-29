@@ -6,7 +6,10 @@ import { StateManager } from "../state/StateManager";
 import { IgnoreFilter } from "../state/IgnoreFilter";
 import { DiffEngine } from "./DiffEngine";
 import { ConflictResolver } from "./ConflictResolver";
-import { base64ToArrayBuffer } from "../utils/base64";
+import {
+	base64ToArrayBuffer,
+	arrayBufferToBase64,
+} from "../utils/base64";
 import { computeGitBlobSha } from "../utils/sha1";
 import { Logger } from "../utils/logger";
 import { unzipSync } from "fflate";
@@ -77,7 +80,7 @@ export class SyncManager {
 
 		try {
 			if (!this.stateManager.hasState()) {
-				await this.initialClone();
+				await this.firstSync();
 			} else {
 				await this.fullSync();
 			}
@@ -106,6 +109,121 @@ export class SyncManager {
 		} finally {
 			this.locked = false;
 		}
+	}
+
+	private async firstSync(): Promise<void> {
+		// Detect if repo has commits or is empty
+		let repoEmpty = false;
+		try {
+			await this.api.getLatestCommit();
+		} catch (err) {
+			if (
+				err instanceof GitHubError &&
+				(err.type === "empty_repo" || err.type === "conflict")
+			) {
+				repoEmpty = true;
+			} else {
+				throw err;
+			}
+		}
+
+		if (repoEmpty) {
+			await this.initialPush();
+		} else {
+			await this.initialClone();
+		}
+	}
+
+	private async initialPush(): Promise<void> {
+		this.logger.info("Empty repo, performing initial push...");
+		new Notice("GitHub Sync: 正在上傳至 GitHub...");
+
+		const localFiles = this.getLocalFilesInfo();
+		const files: Array<{ path: string; content: ArrayBuffer }> = [];
+
+		for (const info of localFiles) {
+			if (info.sizeBytes > 100 * 1024 * 1024) {
+				this.logger.warn(
+					`Skipping large file: ${info.path}`,
+				);
+				continue;
+			}
+			try {
+				const content = await this.vault.adapter.readBinary(
+					info.path,
+				);
+				files.push({ path: info.path, content });
+			} catch (err) {
+				this.logger.error(
+					`Failed to read ${info.path}:`,
+					err,
+				);
+			}
+		}
+
+		if (files.length === 0) {
+			this.logger.info("No files to push");
+			this.setStatus("up-to-date");
+			return;
+		}
+
+		// Create blobs in batches of 10
+		const blobResults: Array<{ path: string; sha: string }> = [];
+		for (let i = 0; i < files.length; i += 10) {
+			const batch = files.slice(i, i + 10);
+			const results = await Promise.all(
+				batch.map(async (file) => {
+					const b64 = arrayBufferToBase64(file.content);
+					const sha = await this.api.createBlob(
+						b64,
+						"base64",
+					);
+					return { path: file.path, sha };
+				}),
+			);
+			blobResults.push(...results);
+		}
+
+		// Create tree (no base_tree for first commit)
+		const treeItems = blobResults.map((b) => ({
+			path: b.path,
+			mode: "100644" as const,
+			type: "blob" as const,
+			sha: b.sha as string | null,
+		}));
+		const treeSha = await this.api.createTree(treeItems);
+
+		// Create commit (no parents for first commit)
+		const message = this.settings.commitMessageTemplate.replace(
+			"{{date}}",
+			new Date().toISOString().split("T")[0],
+		);
+		const commitSha = await this.api.createCommit(message, treeSha, []);
+
+		// Create ref (not update, since branch doesn't exist yet)
+		await this.api.createRef(commitSha);
+
+		// Build manifest
+		for (const blob of blobResults) {
+			const stat = await this.vault.adapter.stat(blob.path);
+			if (stat) {
+				this.stateManager.updateManifest(blob.path, {
+					remoteSha: blob.sha,
+					localMtimeMs: stat.mtime,
+					localSizeBytes: stat.size,
+				});
+			}
+		}
+
+		this.stateManager.setLastSyncedCommitSha(commitSha);
+		this.stateManager.setLastSyncTimestamp(Date.now());
+		await this.stateManager.save();
+
+		this.logger.info(`Initial push complete: ${files.length} files`);
+		new Notice(
+			`GitHub Sync: 上傳完成 (${files.length} 個檔案)`,
+		);
+		this.setStatus("up-to-date");
 	}
 
 	private async fullSync(retryCount = 0): Promise<void> {
