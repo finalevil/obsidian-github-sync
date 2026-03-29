@@ -251,14 +251,67 @@ export class SyncManager {
 			return;
 		}
 
-		// Step 4: Download remote changes
+		// Step 4: Resolve untracked files (exist both sides, not in manifest)
+		const untracked = plan.actions.filter(
+			(a) => a.type === "untracked",
+		);
+		const realConflictsFromUntracked: SyncAction[] = [];
+		if (untracked.length > 0) {
+			this.logger.info(
+				`Checking ${untracked.length} untracked files...`,
+			);
+			for (const action of untracked) {
+				try {
+					const content =
+						await this.vault.adapter.readBinary(action.path);
+					const localSha = await computeGitBlobSha(content);
+					if (localSha === action.remoteSha) {
+						// Same content — just track it
+						const stat = await this.vault.adapter.stat(
+							action.path,
+						);
+						if (stat) {
+							this.stateManager.updateManifest(
+								action.path,
+								{
+									remoteSha: localSha,
+									localMtimeMs: stat.mtime,
+									localSizeBytes: stat.size,
+								},
+							);
+						}
+						this.logger.debug(
+							`Tracked: ${action.path} (SHA match)`,
+						);
+					} else {
+						// Different content — real conflict
+						realConflictsFromUntracked.push({
+							type: "conflict",
+							path: action.path,
+							remoteSha: action.remoteSha,
+						});
+					}
+				} catch (err) {
+					this.logger.warn(
+						`Failed to check ${action.path}:`,
+						err,
+					);
+				}
+			}
+		}
+
+		// Step 5: Download remote changes
 		const downloads = plan.actions.filter((a) => a.type === "download");
 		if (downloads.length > 0) {
 			await this.downloadFiles(downloads, remoteTree);
+			await this.stateManager.save();
 		}
 
-		// Step 5: Handle conflicts
-		const conflicts = plan.actions.filter((a) => a.type === "conflict");
+		// Step 6: Handle conflicts
+		const conflicts = [
+			...plan.actions.filter((a) => a.type === "conflict"),
+			...realConflictsFromUntracked,
+		];
 		let extraUploads: SyncAction[] = [];
 		if (conflicts.length > 0) {
 			new Notice(
@@ -268,7 +321,7 @@ export class SyncManager {
 				await this.conflictResolver.resolveConflicts(conflicts);
 		}
 
-		// Step 6: Delete local files removed from remote
+		// Step 7: Delete local files removed from remote
 		const localDeletes = plan.actions.filter(
 			(a) => a.type === "delete_local",
 		);
@@ -285,7 +338,7 @@ export class SyncManager {
 			}
 		}
 
-		// Step 7: Upload local changes
+		// Step 8: Upload local changes
 		const uploads = [
 			...plan.actions.filter((a) => a.type === "upload"),
 			...extraUploads,
@@ -294,7 +347,10 @@ export class SyncManager {
 		if (uploads.length > 0) {
 			try {
 				await this.uploadFiles(uploads);
+				await this.stateManager.save();
 			} catch (err) {
+				// Save partial progress even on error
+				await this.stateManager.save();
 				if (
 					err instanceof GitHubError &&
 					err.type === "conflict" &&
@@ -310,7 +366,7 @@ export class SyncManager {
 			}
 		}
 
-		// Step 8: Update state
+		// Step 9: Final state update
 		const finalCommit = await this.api.getLatestCommit();
 		this.stateManager.setLastSyncedCommitSha(finalCommit.sha);
 		this.stateManager.setLastSyncTimestamp(Date.now());

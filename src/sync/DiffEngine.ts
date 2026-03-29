@@ -59,9 +59,9 @@ export class DiffEngine {
 						remoteSha: remote.sha,
 					});
 				} else {
-					// Both exist but not tracked — conflict
+					// Both exist but not tracked — compare SHA to decide
 					actions.push({
-						type: "conflict",
+						type: "untracked",
 						path,
 						remoteSha: remote.sha,
 					});
@@ -125,6 +125,7 @@ export class DiffEngine {
 			deleteLocal: actions.filter((a) => a.type === "delete_local")
 				.length,
 			conflict: actions.filter((a) => a.type === "conflict").length,
+			untracked: actions.filter((a) => a.type === "untracked").length,
 		});
 
 		return { actions, remoteCommitSha };

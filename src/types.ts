@@ -48,7 +48,8 @@ export type SyncActionType =
 	| "download"
 	| "upload"
 	| "delete_local"
-	| "conflict";
+	| "conflict"
+	| "untracked";
 
 export interface SyncAction {
 	type: SyncActionType;
