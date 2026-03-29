@@ -23,12 +23,13 @@ export class BatchCommitter {
 	): Promise<string> {
 		const head = await this.api.getLatestCommit();
 
-		// Step 1: Create blobs in parallel (batch of 10)
+		// Step 1: Create blobs in parallel (batch of 3, with delay)
 		this.logger.info(`Creating ${files.length} blobs...`);
 		const blobResults: Array<{ path: string; sha: string }> = [];
 
-		for (let i = 0; i < files.length; i += 10) {
-			const batch = files.slice(i, i + 10);
+		for (let i = 0; i < files.length; i += 3) {
+			if (i > 0) await this.sleep(500);
+			const batch = files.slice(i, i + 3);
 			const results = await Promise.all(
 				batch.map(async (file) => {
 					const base64Content = arrayBufferToBase64(file.content);
@@ -84,5 +85,9 @@ export class BatchCommitter {
 
 		this.logger.info(`Commit created: ${commitSha.substring(0, 7)}`);
 		return commitSha;
+	}
+
+	private sleep(ms: number): Promise<void> {
+		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 }

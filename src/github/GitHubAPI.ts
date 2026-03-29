@@ -15,12 +15,19 @@ export type GitHubErrorType =
 export class GitHubError extends Error {
 	status: number;
 	type: GitHubErrorType;
+	retryable: boolean;
 
-	constructor(message: string, status: number, type: GitHubErrorType) {
+	constructor(
+		message: string,
+		status: number,
+		type: GitHubErrorType,
+		retryable = false,
+	) {
 		super(message);
 		this.name = "GitHubError";
 		this.status = status;
 		this.type = type;
+		this.retryable = retryable;
 	}
 }
 
@@ -55,6 +62,7 @@ export class GitHubAPI {
 	private async request(
 		path: string,
 		options: Partial<RequestUrlParam> = {},
+		retryCount = 0,
 	): Promise<RequestUrlResponse> {
 		const url = path.startsWith("http") ? path : `${this.baseUrl}${path}`;
 		this.logger.debug(`API ${options.method || "GET"} ${path}`);
@@ -80,11 +88,54 @@ export class GitHubAPI {
 		if (limit) this.rateLimit.limit = parseInt(limit);
 		if (reset) this.rateLimit.resetTimestamp = parseInt(reset) * 1000;
 
+		// Retry on rate limit and server errors
+		if (
+			(response.status === 403 || response.status === 429 || response.status >= 500) &&
+			retryCount < 3
+		) {
+			const isRateLimit =
+				response.status === 429 ||
+				this.isSecondaryRateLimit(response);
+
+			if (isRateLimit || response.status >= 500) {
+				const retryAfter = response.headers["retry-after"];
+				const waitMs = retryAfter
+					? parseInt(retryAfter) * 1000
+					: Math.min(1000 * Math.pow(2, retryCount + 1), 60000);
+
+				this.logger.warn(
+					`Rate limit / server error, retrying in ${waitMs / 1000}s (${retryCount + 1}/3)`,
+				);
+				await this.sleep(waitMs);
+				return this.request(path, options, retryCount + 1);
+			}
+		}
+
 		if (response.status >= 400) {
 			this.throwError(response);
 		}
 
 		return response;
+	}
+
+	private isSecondaryRateLimit(response: RequestUrlResponse): boolean {
+		try {
+			const body = response.json;
+			if (
+				body?.message &&
+				typeof body.message === "string" &&
+				body.message.toLowerCase().includes("rate limit")
+			) {
+				return true;
+			}
+		} catch {
+			// ignore
+		}
+		return false;
+	}
+
+	private sleep(ms: number): Promise<void> {
+		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 
 	private throwError(response: RequestUrlResponse): never {
@@ -103,10 +154,15 @@ export class GitHubAPI {
 		if (status === 401) {
 			throw new GitHubError(message, status, "auth");
 		} else if (status === 403) {
-			if (this.rateLimit.remaining === 0) {
-				throw new GitHubError(message, status, "rate_limit");
+			if (
+				this.rateLimit.remaining === 0 ||
+				this.isSecondaryRateLimit(response)
+			) {
+				throw new GitHubError(message, status, "rate_limit", true);
 			}
 			throw new GitHubError(message, status, "forbidden");
+		} else if (status === 429) {
+			throw new GitHubError(message, status, "rate_limit", true);
 		} else if (status === 404) {
 			throw new GitHubError(message, status, "not_found");
 		} else if (status === 409) {
@@ -114,7 +170,7 @@ export class GitHubAPI {
 		} else if (status === 422) {
 			throw new GitHubError(message, status, "conflict");
 		} else if (status >= 500) {
-			throw new GitHubError(message, status, "server");
+			throw new GitHubError(message, status, "server", true);
 		}
 		throw new GitHubError(message, status, "unknown");
 	}

@@ -167,10 +167,11 @@ export class SyncManager {
 			return;
 		}
 
-		// Create blobs in batches of 10
+		// Create blobs in batches of 3 with delay
 		const blobResults: Array<{ path: string; sha: string }> = [];
-		for (let i = 0; i < files.length; i += 10) {
-			const batch = files.slice(i, i + 10);
+		for (let i = 0; i < files.length; i += 3) {
+			if (i > 0) await this.sleep(500);
+			const batch = files.slice(i, i + 3);
 			const results = await Promise.all(
 				batch.map(async (file) => {
 					const b64 = arrayBufferToBase64(file.content);
@@ -182,6 +183,9 @@ export class SyncManager {
 				}),
 			);
 			blobResults.push(...results);
+			this.logger.debug(
+				`Blobs: ${blobResults.length}/${files.length}`,
+			);
 		}
 
 		// Create tree (no base_tree for first commit)
@@ -332,8 +336,9 @@ export class SyncManager {
 	): Promise<void> {
 		const remoteMap = new Map(remoteTree.map((e) => [e.path, e]));
 
-		for (let i = 0; i < actions.length; i += 10) {
-			const batch = actions.slice(i, i + 10);
+		for (let i = 0; i < actions.length; i += 3) {
+			if (i > 0) await this.sleep(500);
+			const batch = actions.slice(i, i + 3);
 			await Promise.all(
 				batch.map(async (action) => {
 					const sha =
@@ -523,6 +528,10 @@ export class SyncManager {
 		}
 
 		return result;
+	}
+
+	private sleep(ms: number): Promise<void> {
+		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 
 	private async ensureParentDir(path: string): Promise<void> {
