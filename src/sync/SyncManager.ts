@@ -338,15 +338,23 @@ export class SyncManager {
 			}
 		}
 
-		// Step 8: Upload local changes
+		// Step 8: Upload local changes + delete remote files
 		const uploads = [
 			...plan.actions.filter((a) => a.type === "upload"),
 			...extraUploads,
 		];
+		const remoteDeletes = plan.actions.filter(
+			(a) => a.type === "delete_remote",
+		);
 
-		if (uploads.length > 0) {
+		if (uploads.length > 0 || remoteDeletes.length > 0) {
 			try {
-				await this.uploadFiles(uploads);
+				const deletedPaths = remoteDeletes.map((a) => a.path);
+				await this.uploadFiles(uploads, deletedPaths);
+				// Clean deleted files from manifest
+				for (const path of deletedPaths) {
+					this.stateManager.removeFromManifest(path);
+				}
 				await this.stateManager.save();
 			} catch (err) {
 				// Save partial progress even on error
@@ -376,7 +384,8 @@ export class SyncManager {
 			downloads.length +
 			uploads.length +
 			conflicts.length +
-			localDeletes.length;
+			localDeletes.length +
+			remoteDeletes.length;
 		this.logger.info(`Sync complete: ${total} actions`);
 		new Notice(`GitHub Sync: 同步完成 (${total} 個變更)`);
 		this.setStatus("up-to-date");
@@ -433,7 +442,10 @@ export class SyncManager {
 		}
 	}
 
-	private async uploadFiles(actions: SyncAction[]): Promise<void> {
+	private async uploadFiles(
+		actions: SyncAction[],
+		deletedPaths: string[] = [],
+	): Promise<void> {
 		const files: Array<{ path: string; content: ArrayBuffer }> = [];
 		for (const action of actions) {
 			try {
@@ -457,14 +469,14 @@ export class SyncManager {
 			}
 		}
 
-		if (files.length === 0) return;
+		if (files.length === 0 && deletedPaths.length === 0) return;
 
 		const message = this.settings.commitMessageTemplate.replace(
 			"{{date}}",
 			new Date().toISOString().split("T")[0],
 		);
 
-		await this.batchCommitter.commit(files, [], message);
+		await this.batchCommitter.commit(files, deletedPaths, message);
 
 		// Update manifest for uploaded files
 		for (const file of files) {

@@ -48,6 +48,7 @@ export type SyncActionType =
 	| "download"
 	| "upload"
 	| "delete_local"
+	| "delete_remote"
 	| "conflict"
 	| "untracked";
 

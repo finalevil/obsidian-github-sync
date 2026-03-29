@@ -66,13 +66,15 @@ export class DiffEngine {
 						remoteSha: remote.sha,
 					});
 				}
+			} else if (!localFile) {
+				// Tracked file deleted/renamed locally → delete from remote
+				actions.push({ type: "delete_remote", path });
 			} else {
 				const remoteShaChanged =
 					remote.sha !== manifestEntry.remoteSha;
-				const localChanged = localFile
-					? localFile.mtimeMs !== manifestEntry.localMtimeMs ||
-						localFile.sizeBytes !== manifestEntry.localSizeBytes
-					: false;
+				const localChanged =
+					localFile.mtimeMs !== manifestEntry.localMtimeMs ||
+					localFile.sizeBytes !== manifestEntry.localSizeBytes;
 
 				if (remoteShaChanged && !localChanged) {
 					// Remote modified
@@ -123,6 +125,8 @@ export class DiffEngine {
 			download: actions.filter((a) => a.type === "download").length,
 			upload: actions.filter((a) => a.type === "upload").length,
 			deleteLocal: actions.filter((a) => a.type === "delete_local")
+				.length,
+			deleteRemote: actions.filter((a) => a.type === "delete_remote")
 				.length,
 			conflict: actions.filter((a) => a.type === "conflict").length,
 			untracked: actions.filter((a) => a.type === "untracked").length,
