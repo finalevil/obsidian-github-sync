@@ -1,109 +1,111 @@
+English | [繁體中文](README.zh-TW.md)
+
 # GitHub Sync
 
-透過 GitHub REST API 同步 Obsidian Vault，無需安裝 Git。
+Sync your Obsidian Vault via GitHub REST API — no Git installation required.
 
-## 功能特色
+## Features
 
-- 雙向同步（本地 ↔ GitHub）
-- 純 REST API，不依賴 Git
-- 自動同步（開啟時 / 變更時 / 定時）
-- 手動同步（命令面板或 Ribbon 按鈕）
-- 衝突偵測與解決（自動建立 conflict 副本）
-- 檔案忽略規則（glob 模式）
-- 自訂 Commit 訊息範本
-- 速率限制自動處理
-- 支援桌面端與行動端
+- Bidirectional sync (Local ↔ GitHub)
+- Pure REST API, no Git dependency
+- Auto sync (on open / on change / on interval)
+- Manual sync (command palette or Ribbon button)
+- Conflict detection and resolution (auto-creates conflict copies)
+- File ignore rules (glob patterns)
+- Custom commit message templates
+- Automatic rate limit handling
+- Desktop and mobile support
 
-## 安裝方式
+## Installation
 
-### 透過 BRAT 安裝（推薦測試版）
+### Via BRAT (Recommended for Beta)
 
-1. **安裝 BRAT 插件**
-   - 開啟 Obsidian → 設定 → 第三方外掛 → 關閉安全模式（如尚未關閉）
-   - 點擊「瀏覽」社群外掛
-   - 搜尋「BRAT」
-   - 找到「Obsidian42 - BRAT」後點擊「安裝」
-   - 安裝完成後點擊「啟用」
+1. **Install the BRAT plugin**
+   - Open Obsidian → Settings → Community plugins → Disable Restricted Mode (if not already)
+   - Click "Browse" community plugins
+   - Search for "BRAT"
+   - Find "Obsidian42 - BRAT" and click "Install"
+   - Click "Enable" after installation
 
-2. **透過 BRAT 新增本插件**
-   - 開啟 Obsidian → 設定 → Obsidian42 - BRAT（在左側選單的第三方外掛區域）
-   - 點擊「Add Beta plugin」按鈕
-   - 在彈出的輸入框中填入：`alex/obsidian-github-sync`
-   - 點擊「Add Plugin」
-   - 等待 BRAT 下載並安裝完成
+2. **Add this plugin via BRAT**
+   - Open Obsidian → Settings → Obsidian42 - BRAT (in the Community plugins section)
+   - Click the "Add Beta plugin" button
+   - Enter: `alex/obsidian-github-sync`
+   - Click "Add Plugin"
+   - Wait for BRAT to download and install
 
-3. **啟用插件**
-   - 開啟 Obsidian → 設定 → 第三方外掛
-   - 在已安裝的外掛清單中找到「GitHub Sync」
-   - 將開關切換為啟用
+3. **Enable the plugin**
+   - Open Obsidian → Settings → Community plugins
+   - Find "GitHub Sync" in the installed plugins list
+   - Toggle it on
 
-BRAT 會自動追蹤 beta 版本更新，當有新版本發布時會自動通知並更新。
+BRAT will automatically track beta updates and notify you when new versions are available.
 
-### 手動安裝
+### Manual Installation
 
-1. **下載檔案**
-   - 前往本專案的 [GitHub Releases](https://github.com/alex/obsidian-github-sync/releases) 頁面
-   - 在最新版本中下載以下三個檔案：`main.js`、`manifest.json`、`styles.css`
+1. **Download files**
+   - Go to the [GitHub Releases](https://github.com/alex/obsidian-github-sync/releases) page
+   - Download these three files from the latest release: `main.js`, `manifest.json`, `styles.css`
 
-2. **放入插件目錄**
-   - 找到你的 Vault 資料夾（就是 Obsidian 開啟的那個資料夾）
-   - 進入 `.obsidian/plugins/` 目錄（如果 `plugins` 資料夾不存在就手動建立）
-   - 在 `plugins` 目錄下建立一個新資料夾，命名為 `obsidian-github-sync`
-   - 將下載的三個檔案放入這個資料夾中
+2. **Copy to plugins directory**
+   - Locate your Vault folder (the folder Obsidian opens)
+   - Navigate to `.obsidian/plugins/` (create the `plugins` folder if it doesn't exist)
+   - Create a new folder named `obsidian-github-sync` inside `plugins`
+   - Place the three downloaded files into this folder
 
-3. **啟用插件**
-   - 重新啟動 Obsidian
-   - 開啟 設定 → 第三方外掛 → 關閉安全模式（如尚未關閉）
-   - 在已安裝的外掛清單中找到「GitHub Sync」
-   - 將開關切換為啟用
+3. **Enable the plugin**
+   - Restart Obsidian
+   - Open Settings → Community plugins → Disable Restricted Mode (if not already)
+   - Find "GitHub Sync" in the installed plugins list
+   - Toggle it on
 
-## 設定說明
+## Configuration
 
-### GitHub 連線設定
+### GitHub Connection
 
-| 設定項目 | 說明 |
-|---------|------|
-| GitHub Token | Personal Access Token（需要 `repo` scope） |
-| GitHub Repo | 格式：`owner/repo-name` |
-| Branch | 要同步的分支（預設 `main`） |
+| Setting | Description |
+|---------|-------------|
+| GitHub Token | Personal Access Token (requires `repo` scope) |
+| GitHub Repo | Format: `owner/repo-name` |
+| Branch | Branch to sync (default: `main`) |
 
-設定完成後可點擊「測試連線」按鈕驗證設定是否正確。
+After configuration, click the "Test Connection" button to verify your settings.
 
-### 自動同步設定
+### Auto Sync
 
-| 設定項目 | 預設值 | 說明 |
-|---------|--------|------|
-| 啟用自動同步 | 開啟 | 自動偵測變更並同步 |
-| 開啟時同步 | 開啟 | Obsidian 啟動時自動從 GitHub 同步 |
-| 變更時同步 | 開啟 | 檔案變更後自動同步到 GitHub |
-| Debounce 秒數 | 30 | 檔案變更後等待多少秒再同步 |
-| 定時同步 | 開啟 | 每隔固定時間自動同步 |
-| 同步間隔（分鐘） | 5 | 定時同步的間隔 |
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Enable Auto Sync | On | Automatically detect changes and sync |
+| Sync on Open | On | Sync from GitHub when Obsidian starts |
+| Sync on Change | On | Sync to GitHub after file changes |
+| Debounce (seconds) | 30 | Wait time after file change before syncing |
+| Interval Sync | On | Sync automatically at regular intervals |
+| Sync Interval (minutes) | 5 | Interval between automatic syncs |
 
-### 進階設定
+### Advanced
 
-| 設定項目 | 說明 |
-|---------|------|
-| Commit 訊息範本 | 支援 `{{date}}` 作為日期佔位符（預設 `vault sync: {{date}}`） |
-| 忽略規則 | 每行一個 glob 規則，符合的檔案不會同步 |
-| 除錯日誌 | 在開發者工具中顯示詳細日誌 |
+| Setting | Description |
+|---------|-------------|
+| Commit Message Template | Supports `{{date}}` placeholder (default: `vault sync: {{date}}`) |
+| Ignore Rules | One glob pattern per line; matched files are excluded from sync |
+| Debug Logging | Show detailed logs in developer tools |
 
-## 使用方式
+## Usage
 
-- **命令面板**（`Ctrl/Cmd + P`）：
-  - `GitHub Sync: 立即同步` — 執行一次增量同步
-  - `GitHub Sync: 強制完整同步` — 忽略快取，重新比對所有檔案
-- **Ribbon 按鈕**：點擊左側工具列的同步圖示
-- **狀態欄**：底部狀態欄會顯示目前的同步狀態
+- **Command Palette** (`Ctrl/Cmd + P`):
+  - `GitHub Sync: Sync Now` — Run an incremental sync
+  - `GitHub Sync: Force Full Sync` — Ignore cache and re-compare all files
+- **Ribbon Button**: Click the sync icon in the left sidebar
+- **Status Bar**: The bottom status bar shows current sync status
 
-## 開發
+## Development
 
 ```bash
 npm install
-npm run dev      # 開發模式
-npm run build    # 生產構建
+npm run dev      # Development mode
+npm run build    # Production build
 ```
 
-## 授權
+## License
 
 MIT License
